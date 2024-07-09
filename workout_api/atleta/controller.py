@@ -1,13 +1,12 @@
 from datetime import datetime
 from uuid import uuid4
 from fastapi import APIRouter, Body, HTTPException, Query, status
-from fastapi_pagination import Page, add_pagination
-from fastapi_pagination.ext.sqlalchemy import paginate as sqlalchemy_paginate
+from fastapi_pagination import LimitOffsetPage, add_pagination, paginate
 from pydantic import UUID4
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 
-from workout_api.atleta.schemas import AtletaIn, AtletaOut, AtletaUpdate
+from workout_api.atleta.schemas import AtletaGet, AtletaIn, AtletaOut, AtletaUpdate
 from workout_api.atleta.models import AtletaModel
 from workout_api.categorias.models import CategoriaModel
 from workout_api.centro_treinamento.models import CentroTreinamentoModel
@@ -67,29 +66,27 @@ async def post(
         '/',
         summary='Consultar todos os atletas',
         status_code=status.HTTP_200_OK,
-        response_model=Page[AtletaOut],
+        response_model=LimitOffsetPage[AtletaGet],
 )
 async def query(
     db_session: DatabaseDependency,
     # Query parameters para ser utilizado nos endpoints. Ex: localhost/atletas?nome=Richard
     nome: str = Query(None, description="Nome do atleta para filtrar"),
-    idade: int = Query(None, description="Idade do atleta para filtrar")
-) -> Page[AtletaOut]:
+    cpf: str = Query(None, description="CPF do atleta para filtrar")
+) -> LimitOffsetPage[AtletaGet]:
     
     query = select(AtletaModel)
 
     if nome:
         query = query.filter(AtletaModel.nome == nome)
     
-    if idade:
-        query = query.filter(AtletaModel.idade == idade)
+    if cpf:
+        query = query.filter(AtletaModel.cpf == cpf)
 
-    #atletas = (await db_session.execute(query)).scalars().all()
+    atletas = (await db_session.execute(query)).scalars().all()
+    atletas = [AtletaGet.model_validate(atleta) for atleta in atletas]
 
-    #atletas = [AtletaOut.model_validate(atleta) for atleta in atletas]
-
-    return await sqlalchemy_paginate(db_session, query)
-
+    return paginate(atletas)
 
 @router.get(
         '/{id}',
@@ -147,6 +144,5 @@ async def query(id: UUID4,
 
     await db_session.delete(atleta)
     await db_session.commit()
-
 
 add_pagination(router)
